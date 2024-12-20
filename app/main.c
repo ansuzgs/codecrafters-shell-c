@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <limits.h>
 
 int is_executable(const char *path) {
 	return access(path, X_OK) == 0;
@@ -67,7 +68,7 @@ int main() {
 			printf("%s\n", p);
 		} else if (strncmp(input, "type", 4) == 0) {
 			char *p = input + 5;
-			char builtins[][5] = {"echo", "type", "exit"};
+			char builtins[][5] = {"echo", "type", "exit", "pwd"};
 			int found = 1;
 			for (int i = 0; i < sizeof(builtins)/5; i++) {
 				if (strncmp(p, builtins[i], strlen(builtins[i])) == 0) {
@@ -84,6 +85,13 @@ int main() {
 				}
 			}
 			if (found  == 1) printf("%s: not found\n", p); 
+		} else if (strncmp(input, "pwd", 3) == 0) {
+			char current_path[PATH_MAX];
+			if (getcwd(current_path, PATH_MAX) != NULL) {
+				printf("%s\n", current_path);
+			} else {
+				perror("getcwd");
+			}
 		} else {
 			/* Process the string, split the command in command and arguments */
 			char *argv[10];

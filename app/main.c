@@ -93,7 +93,11 @@ int main() {
 				perror("getcwd");
 			}
 		} else if (strncmp(input, "cd", 2) == 0) {
-			if (chdir(input + 3) != 0) {
+			if (strncmp(input+3, "~", 1) == 0) {
+				char *home_env = getenv("HOME");
+				if (home_env == NULL) perror("HOME");
+				if (chdir(home_env) != 0) perror("cd HOME");
+			} else if (chdir(input + 3) != 0) {
 				printf("cd: %s: No such file or directory\n", input+3);
 			}	       
 		} else {

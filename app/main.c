@@ -1,5 +1,33 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int is_executable(const char *path) {
+	return access(path, X_OK) == 0;
+}
+
+char *find_in_path(const char *command) {
+	char *path_env = getenv("PATH");
+	if (path_env == NULL) return NULL;
+
+	char *path_copy  = strdup(path_env);
+	char *dir = strtok(path_copy, ":");
+
+	static char full_path[1024] = {0};
+
+	while (dir != NULL) {
+		snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);
+		if (is_executable(full_path) == 0) {
+			free(path_copy);
+			return full_path;
+		}
+		dir = strtok(NULL, ":");
+	}
+
+	free(path_copy);
+	return NULL;
+}
 
 int main() {
 	// Flush after every printf
@@ -31,6 +59,11 @@ int main() {
 					found = 0;
 					break;
 				}
+			}
+			char *path = find_in_path(p);
+			if (path) {
+				found = 0;
+				printf("%s is %s\n", p, path);
 			}
 			if (found  == 1) printf("%s: not found\n", p); 
 		} else {

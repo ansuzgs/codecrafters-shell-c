@@ -68,7 +68,7 @@ int main() {
 			printf("%s\n", p);
 		} else if (strncmp(input, "type", 4) == 0) {
 			char *p = input + 5;
-			char builtins[][5] = {"echo", "type", "exit", "pwd"};
+			char builtins[][5] = {"echo", "type", "exit", "pwd", "cd"};
 			int found = 1;
 			for (int i = 0; i < sizeof(builtins)/5; i++) {
 				if (strncmp(p, builtins[i], strlen(builtins[i])) == 0) {
@@ -92,6 +92,10 @@ int main() {
 			} else {
 				perror("getcwd");
 			}
+		} else if (strncmp(input, "cd", 2) == 0) {
+			if (chdir(input + 3) != 0) {
+				printf("cd: %s: No such file or directory\n", input+3);
+			}	       
 		} else {
 			/* Process the string, split the command in command and arguments */
 			char *argv[10];

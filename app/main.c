@@ -18,7 +18,7 @@ char *find_in_path(const char *command) {
 
 	while (dir != NULL) {
 		snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);
-		if (is_executable(full_path) == 0) {
+		if (is_executable(full_path) == 1) {
 			free(path_copy);
 			return full_path;
 		}

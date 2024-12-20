@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 int is_executable(const char *path) {
 	return access(path, X_OK) == 0;
@@ -27,6 +29,20 @@ char *find_in_path(const char *command) {
 
 	free(path_copy);
 	return NULL;
+}
+
+void fork_and_execute(char *cmd_path, int argc, char **argv) {
+	pid_t pid = fork();
+	if (pid == 0) {
+		execv(cmd_path, argv);
+		perror("execv");
+		exit(1);
+	} else if (pid < 0) {
+		perror("fork");
+	} else {
+		int status;
+		waitpid(pid, &status, 0);
+	}
 }
 
 int main() {
@@ -69,7 +85,24 @@ int main() {
 			}
 			if (found  == 1) printf("%s: not found\n", p); 
 		} else {
-			printf("%s: command not found\n", input);
+			/* Process the string, split the command in command and arguments */
+			char *argv[10];
+			int argc = 0;
+			char *token = strtok(input, " ");
+			while (token != NULL && argc < 10) {
+				argv[argc++] = token;
+				token = strtok(NULL, " ");
+			}
+			argv[argc] = NULL;
+			/* Check if the command is in the path */
+			char *cmd_path = find_in_path(argv[0]);
+			/* if it is -> execute the command with the arguments */
+			if (cmd_path != NULL) {
+				fork_and_execute(cmd_path, argc, argv);
+			} else {
+				/* if not -> prinf unknown command */
+				printf("%s: command not found\n", input);
+			}
 		}
 	}
 	return 0;

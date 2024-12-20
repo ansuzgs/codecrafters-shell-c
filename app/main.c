@@ -14,7 +14,7 @@ char *find_in_path(const char *command) {
 	char *path_copy  = strdup(path_env);
 	char *dir = strtok(path_copy, ":");
 
-	static char full_path[1024] = {0};
+	static char full_path[1024];
 
 	while (dir != NULL) {
 		snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);

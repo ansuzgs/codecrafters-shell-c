@@ -23,12 +23,16 @@ int main() {
 			printf("%s\n", p);
 		} else if (strncmp(input, "type", 4) == 0) {
 			char *p = input + 5;
-			if (strncmp(p, "echo", 4) == 0) printf("echo is a shell builtin\n");
-			else if (strncmp(p, "exit", 4) == 0) printf("exit is a shell builtin\n");
-			else if (strncmp(p, "type", 4) == 0) printf("type is a shell builtin\n");
-			else {
-				printf("%s: not found\n", p); 
+			char builtins[][5] = {"echo", "type", "exit"};
+			int found = 1;
+			for (int i = 0; i < sizeof(builtins)/5; i++) {
+				if (strncmp(p, builtins[i], strlen(builtins[i])) == 0) {
+					printf("%s is a shell builtin\n", p);
+					found = 0;
+					break;
+				}
 			}
+			if (found  == 1) printf("%s: not found\n", p); 
 		} else {
 			printf("%s: command not found\n", input);
 		}

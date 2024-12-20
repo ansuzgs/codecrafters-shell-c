@@ -17,9 +17,13 @@ int main() {
 	  input[strlen(input) - 1] = '\0';
 
 	  if (strcmp(input, "exit 0") == 0) {
-		  break;
+		break;
+	  } else if (strncmp(input, "echo", 4) == 0) {
+	  	char *p = input + 5;
+		printf("%s\n", p);
+	  } else {
+		  printf("%s: command not found\n", input);
 	  }
-	  printf("%s: command not found\n", input);
   }
   return 0;
 }

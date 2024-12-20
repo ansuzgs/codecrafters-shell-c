@@ -60,10 +60,12 @@ int main() {
 					break;
 				}
 			}
-			char *path = find_in_path(p);
-			if (path) {
-				found = 0;
-				printf("%s is %s\n", p, path);
+			if (found == 1) {
+				char *path = find_in_path(p);
+				if (path) {
+					found = 0;
+					printf("%s is %s\n", p, path);
+				}
 			}
 			if (found  == 1) printf("%s: not found\n", p); 
 		} else {

@@ -80,6 +80,7 @@ int tokenize_input(const char *input, char **args) {
     int token_num = 0;
     int in_token = 0;
     int in_quote = 0;
+    int in_dquote = 0;
 
     for (int i = 0; i < strlen(input); i++) {
         char temp[100];
@@ -92,7 +93,7 @@ int tokenize_input(const char *input, char **args) {
             token_num++;
             break;
         } else if (input[i] == ' ') {
-            if ((in_token == 1) && (in_quote == 0)) {
+            if ((in_token == 1) && (in_quote == 0) && (in_dquote == 0)) {
                 temp[token_idx] = '\0';
                 token_idx = 0;
                 args[token_num] = malloc(sizeof(char) * strlen(temp));
@@ -100,14 +101,22 @@ int tokenize_input(const char *input, char **args) {
                 in_token = 0;
                 in_quote = 0;
                 token_num++;
-            } else if ((in_token == 1) && (in_quote == 1)) {
+            } else if ((in_token == 1) && (in_quote == 1) || (in_dquote == 1)) {
                 temp[token_idx++] = input[i];
             }
-        } else if (input[i] == '\'') {
+        } else if (input[i] == '\'' && in_dquote == 0) {
             if (in_quote == 1) {
                 in_quote = 0;
             } else {
                 in_quote = 1;
+            }
+        } else if (input[i] == '\'' && in_dquote == 1) {
+            temp[token_idx++] = input[i];
+        } else if (input[i] == '\"') {
+            if (in_dquote == 0) {
+                in_dquote = 1;
+            } else {
+                in_dquote = 0;
             }
         } else {
             if (in_token == 0)

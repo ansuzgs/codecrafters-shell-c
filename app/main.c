@@ -28,8 +28,8 @@ builtin_command_t builtin_commands[] = {
 };
 
 int main() {
-// Flush after every printf
-	setbuf(stdout, NULL);
+    // Flush after every printf
+    setbuf(stdout, NULL);
 
     char input[1024];
 
@@ -63,7 +63,7 @@ int main() {
         }
 
         if (found == 0 || check != 0) {
-            printf("%s: incorrect command\n", args[0]);
+            printf("%s: command not found\n", args[0]);
         }
 
         for (int i = 0; i < token_num; i++) {

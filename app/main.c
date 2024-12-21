@@ -118,8 +118,9 @@ int tokenize_input(const char *input, char **args) {
             } else {
                 in_dquote = 0;
             }
-        } else if (input[i] == '\\' && (in_dquote == 0) && (in_quote == 0)) {
-            temp[token_idx++] = input[++i];
+        } else if (input[i] == '\\' && ((in_dquote == 0) && (in_quote == 0))) {
+            i++;
+            temp[token_idx++] = input[i];
         } else {
             if (in_token == 0)
                 in_token = 1;

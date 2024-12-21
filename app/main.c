@@ -28,8 +28,6 @@ builtin_command_t builtin_commands[] = {
 };
 
 int main() {
-    printf("HOLA\n");
-
     char input[1024];
 
     char *args[20];

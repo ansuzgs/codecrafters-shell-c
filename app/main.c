@@ -28,12 +28,16 @@ builtin_command_t builtin_commands[] = {
 };
 
 int main() {
+// Flush after every printf
+	setbuf(stdout, NULL);
+
     char input[1024];
 
     char *args[20];
 
     while (1) {
 
+        memset(input, 0, 1024);
         printf("$ ");
         memset(input, 0, 1024);
         fgets(input, 1024, stdin);

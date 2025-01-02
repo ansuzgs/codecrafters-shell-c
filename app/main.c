@@ -187,6 +187,9 @@ int tokenize(const char *line, char **tokens) {
                 case ' ':
                     buffer[buf_idx++] = ' ';
                     break;
+                case '\'':
+                    buffer[buf_idx++] = '\'';
+                    break;
                 default:
                     // las desconocidas => '\' + c
                     if (buf_idx < MAX_LENGTH - 2) {
@@ -208,14 +211,6 @@ int tokenize(const char *line, char **tokens) {
                     break;
                 case '\"':
                     buffer[buf_idx++] = '\"';
-                    break;
-
-                case '\'':
-                    if (buf_idx < MAX_LENGTH - 2) {
-                        buffer[buf_idx++] = '\\';
-                        buffer[buf_idx++] = c;
-                    }
-
                     break;
                 default:
                     if (buf_idx < MAX_LENGTH - 2) {

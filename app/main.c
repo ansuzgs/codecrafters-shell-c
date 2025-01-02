@@ -175,159 +175,173 @@ int tokenize(const char *line, char **tokens) {
 
         case STATE_ESCAPED:
             // Tomamos el siguiente caracter literalmente
-            switch (c) {
-            case 'n':
-                buffer[buf_idx++] = 'n';
-                break;
-            case 't':
-                buffer[buf_idx++] = '\t';
-                break;
-            case '\\':
-                buffer[buf_idx++] = '\\';
-                break;
-            case '\"':
-                buffer[buf_idx++] = '\"';
-                break;
-            case ' ':
-                buffer[buf_idx++] = ' ';
-                break;
-            case '\'':
-                if (prev_state == STATE_IN_DOUBLE_QUOTES) {
+
+            if (prev_state == STATE_NORMAL) {
+                switch (c) {
+                case 'n':
+                    buffer[buf_idx++] = 'n';
+                    break;
+                case 't':
+                    buffer[buf_idx++] = 't';
+                    break;
+                default:
+                    // las desconocidas => '\' + c
+                    if (buf_idx < MAX_LENGTH - 2) {
+                        buffer[buf_idx++] = '\\';
+                        buffer[buf_idx++] = c;
+                    }
+                    break;
+                }
+            } else if (prev_state == STATE_IN_DOUBLE_QUOTES) {
+                switch (c) {
+                case 'n':
+                    buffer[buf_idx++] = 'n';
+                    break;
+                case 't':
+                    buffer[buf_idx++] = '\t';
+                    break;
+                case '\\':
+                    buffer[buf_idx++] = '\\';
+                    break;
+                case '\"':
+                    buffer[buf_idx++] = '\"';
+                    break;
+                case ' ':
+                    buffer[buf_idx++] = ' ';
+                    break;
+                case '\'':
                     if (buf_idx < MAX_LENGTH - 2) {
                         buffer[buf_idx++] = '\\';
                         buffer[buf_idx++] = c;
                     }
 
-                } else {
-                    buffer[buf_idx++] = '\'';
+                    break;
+                default:
+                    if (buf_idx < MAX_LENGTH - 2) {
+                        buffer[buf_idx++] = '\\';
+                        buffer[buf_idx++] = c;
+                    }
+                    break;
                 }
-                break;
-            default:
-                if (buf_idx < MAX_LENGTH - 2) {
-                    buffer[buf_idx++] = '\\';
-                    buffer[buf_idx++] = c;
-                }
+                // Heuristica minima para volver a un estado anterior.
+                // En un diseño mas completo se guardaria prev_state
+                state = prev_state;
                 break;
             }
-            // Heuristica minima para volver a un estado anterior.
-            // En un diseño mas completo se guardaria prev_state
-            state = prev_state;
-            break;
         }
+
+        // Si quedara algo en el buffer al final, cerrar ese token
+        finish_token(buffer, &buf_idx, tokens, &token_count);
+
+        return token_count;
     }
 
-    // Si quedara algo en el buffer al final, cerrar ese token
-    finish_token(buffer, &buf_idx, tokens, &token_count);
+    int is_executable(const char *path) { return access(path, X_OK) == 0; }
 
-    return token_count;
-}
+    char *find_in_path(const char *command) {
+        char *path_env = getenv("PATH");
+        if (path_env == NULL)
+            return NULL;
 
-int is_executable(const char *path) { return access(path, X_OK) == 0; }
+        char *path_copy = strdup(path_env);
+        char *dir = strtok(path_copy, ":");
 
-char *find_in_path(const char *command) {
-    char *path_env = getenv("PATH");
-    if (path_env == NULL)
+        static char full_path[PATH_MAX];
+
+        while (dir != NULL) {
+            snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);
+            if (is_executable(full_path) == 1) {
+                free(path_copy);
+                return full_path;
+            }
+            dir = strtok(NULL, ":");
+        }
+        free(path_copy);
         return NULL;
-
-    char *path_copy = strdup(path_env);
-    char *dir = strtok(path_copy, ":");
-
-    static char full_path[PATH_MAX];
-
-    while (dir != NULL) {
-        snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);
-        if (is_executable(full_path) == 1) {
-            free(path_copy);
-            return full_path;
-        }
-        dir = strtok(NULL, ":");
     }
-    free(path_copy);
-    return NULL;
-}
 
-void fork_and_execute(char *cmd_path, int argc, char **args) {
-    /*for (int i = 0; i < argc; i++) {*/
-    /*    printf("args[%d] = %s\n", i, args[i]);*/
-    /*}*/
-    pid_t pid = fork();
-    if (pid == 0) {
-        execv(cmd_path, args);
-        perror("execv");
-        exit(EXIT_FAILURE);
-    } else if (pid < 0) {
-        perror("fork");
-    } else {
-        int status;
-        waitpid(pid, &status, 0);
-    }
-}
-
-int process_exit(char *args[], int argc) {
-    if (argc == 2) {
-        if (strncmp(args[1], "0", 1) == 0) {
-            exit(EXIT_SUCCESS);
-        } else {
+    void fork_and_execute(char *cmd_path, int argc, char **args) {
+        /*for (int i = 0; i < argc; i++) {*/
+        /*    printf("args[%d] = %s\n", i, args[i]);*/
+        /*}*/
+        pid_t pid = fork();
+        if (pid == 0) {
+            execv(cmd_path, args);
+            perror("execv");
             exit(EXIT_FAILURE);
-        }
-    } else {
-        printf("Incorrect use of exit\n");
-        return 1;
-    }
-    return 0;
-}
-
-int process_echo(char *args[], int argc) {
-    for (int i = 1; i < argc; i++) {
-        if (i < argc - 1) {
-            printf("%s ", args[i]);
+        } else if (pid < 0) {
+            perror("fork");
         } else {
-            printf("%s", args[i]);
+            int status;
+            waitpid(pid, &status, 0);
         }
     }
-    printf("\n");
-    return 0;
-}
 
-int process_type(char *args[], int argc) {
-    if (argc == 2) {
-        for (int i = 0; i < ARRAY_SIZE(builtin_commands); i++) {
-            if (strncmp(args[1], builtin_commands[i].name,
-                        strlen(builtin_commands[i].name)) == 0) {
-                printf("%s is a shell builtin\n", builtin_commands[i].name);
+    int process_exit(char *args[], int argc) {
+        if (argc == 2) {
+            if (strncmp(args[1], "0", 1) == 0) {
+                exit(EXIT_SUCCESS);
+            } else {
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            printf("Incorrect use of exit\n");
+            return 1;
+        }
+        return 0;
+    }
+
+    int process_echo(char *args[], int argc) {
+        for (int i = 1; i < argc; i++) {
+            if (i < argc - 1) {
+                printf("%s ", args[i]);
+            } else {
+                printf("%s", args[i]);
+            }
+        }
+        printf("\n");
+        return 0;
+    }
+
+    int process_type(char *args[], int argc) {
+        if (argc == 2) {
+            for (int i = 0; i < ARRAY_SIZE(builtin_commands); i++) {
+                if (strncmp(args[1], builtin_commands[i].name,
+                            strlen(builtin_commands[i].name)) == 0) {
+                    printf("%s is a shell builtin\n", builtin_commands[i].name);
+                    return 0;
+                }
+            }
+
+            char *path = find_in_path(args[1]);
+            if (path != NULL) {
+                printf("%s is %s\n", args[1], path);
                 return 0;
             }
+            printf("%s: not found\n", args[1]);
         }
 
-        char *path = find_in_path(args[1]);
-        if (path != NULL) {
-            printf("%s is %s\n", args[1], path);
-            return 0;
+        return 0;
+    }
+
+    int process_pwd(char *args[], int argc) {
+        char current_path[PATH_MAX];
+        if (getcwd(current_path, PATH_MAX) != NULL) {
+            printf("%s\n", current_path);
+        } else {
+            perror("getcwd");
         }
-        printf("%s: not found\n", args[1]);
+        return 0;
     }
-
-    return 0;
-}
-
-int process_pwd(char *args[], int argc) {
-    char current_path[PATH_MAX];
-    if (getcwd(current_path, PATH_MAX) != NULL) {
-        printf("%s\n", current_path);
-    } else {
-        perror("getcwd");
+    int process_cd(char *args[], int argc) {
+        if (strncmp(args[1], "~", 1) == 0) {
+            char *home_env = getenv("HOME");
+            if (home_env == NULL)
+                perror("HOME");
+            if (chdir(home_env) != 0)
+                perror("cd HOME");
+        } else if (chdir(args[1]) != 0) {
+            printf("cd: %s: No such file or directory\n", args[1]);
+        }
+        return 0;
     }
-    return 0;
-}
-int process_cd(char *args[], int argc) {
-    if (strncmp(args[1], "~", 1) == 0) {
-        char *home_env = getenv("HOME");
-        if (home_env == NULL)
-            perror("HOME");
-        if (chdir(home_env) != 0)
-            perror("cd HOME");
-    } else if (chdir(args[1]) != 0) {
-        printf("cd: %s: No such file or directory\n", args[1]);
-    }
-    return 0;
-}

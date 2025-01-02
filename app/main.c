@@ -87,7 +87,6 @@ int main() {
         for (int i = 0; i < token_num; i++) {
             free(args[i]);
         }
-        fflush(stdin);
     }
 
     return 0;
@@ -116,6 +115,7 @@ void finish_token(char *buffer, int *buf_idx, char **tokens, int *token_count) {
 
 int tokenize(const char *line, char **tokens) {
     parse_state_e state = STATE_NORMAL;
+    parse_state_e prev_state = STATE_NORMAL;
     char buffer[MAX_LENGTH];
     int buf_idx = 0;
     int token_count = 0;
@@ -127,6 +127,7 @@ int tokenize(const char *line, char **tokens) {
         case STATE_NORMAL:
             if (c == '\\') {
                 // Pasamos al estado STATE_ESCAPED
+                prev_state = STATE_NORMAL;
                 state = STATE_ESCAPED;
             } else if (c == '\'') {
                 // Pasamos al estado comillas simples
@@ -162,6 +163,7 @@ int tokenize(const char *line, char **tokens) {
                 state = STATE_NORMAL;
             } else if (c == '\\') {
                 // Permitir escapes dentro de comillas dobles
+                prev_state = STATE_IN_DOUBLE_QUOTES;
                 state = STATE_ESCAPED;
             } else {
                 // Acumulamos literal
@@ -173,16 +175,43 @@ int tokenize(const char *line, char **tokens) {
 
         case STATE_ESCAPED:
             // Tomamos el siguiente caracter literalmente
-            if (buf_idx < MAX_LENGTH - 1) {
-                buffer[buf_idx++] = c;
+            switch (c) {
+            /*case 'n':*/
+            /*    buffer[buf_idx++] = '\n';*/
+            /*    break;*/
+            case 't':
+                buffer[buf_idx++] = '\t';
+                break;
+            case '\\':
+                buffer[buf_idx++] = '\\';
+                break;
+            case '\"':
+                buffer[buf_idx++] = '\"';
+                break;
+            case ' ':
+                buffer[buf_idx++] = ' ';
+                break;
+            case '\'':
+                if (prev_state == STATE_IN_DOUBLE_QUOTES) {
+                    if (buf_idx < MAX_LENGTH - 2) {
+                        buffer[buf_idx++] = '\\';
+                        buffer[buf_idx++] = c;
+                    }
+
+                } else {
+                    buffer[buf_idx++] = '\'';
+                }
+                break;
+            default:
+                if (buf_idx < MAX_LENGTH - 2) {
+                    buffer[buf_idx++] = '\\';
+                    buffer[buf_idx++] = c;
+                }
+                break;
             }
             // Heuristica minima para volver a un estado anterior.
             // En un diseño mas completo se guardaria prev_state
-            if (i > 0 && line[i - 1] == '\"') {
-                state = STATE_IN_DOUBLE_QUOTES;
-            } else {
-                state = STATE_NORMAL;
-            }
+            state = prev_state;
             break;
         }
     }
@@ -218,6 +247,9 @@ char *find_in_path(const char *command) {
 }
 
 void fork_and_execute(char *cmd_path, int argc, char **args) {
+    /*for (int i = 0; i < argc; i++) {*/
+    /*    printf("args[%d] = %s\n", i, args[i]);*/
+    /*}*/
     pid_t pid = fork();
     if (pid == 0) {
         execv(cmd_path, args);

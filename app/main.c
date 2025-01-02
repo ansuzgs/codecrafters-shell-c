@@ -203,9 +203,9 @@ int tokenize(const char *line, char **tokens) {
                 }
             } else if (prev_state == STATE_IN_DOUBLE_QUOTES) {
                 switch (c) {
-                case 'n':
-                    buffer[buf_idx++] = '\n';
-                    break;
+                /*case 'n':*/
+                /*    buffer[buf_idx++] = '\n';*/
+                /*    break;*/
                 case 't':
                     buffer[buf_idx++] = '\t';
                     break;

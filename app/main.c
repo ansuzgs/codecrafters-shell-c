@@ -1,4 +1,6 @@
+#include <ctype.h>
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,8 +8,11 @@
 #include <unistd.h>
 
 #define ARRAY_SIZE(x) sizeof(x) / sizeof(x[0])
+#define MAX_TOKENS 100
+#define MAX_LENGTH 256
 
-int tokenize_input(const char *input, char **args);
+void finish_token(char *buffer, int *buf_idx, char **tokens, int *token_count);
+int tokenize(const char *line, char **tokens);
 int is_executable(const char *path);
 char *find_in_path(const char *command);
 void fork_and_execute(char *cmd_path, int argc, char **args);
@@ -16,6 +21,13 @@ int process_echo(char *args[], int argc);
 int process_type(char *args[], int argc);
 int process_pwd(char *args[], int argc);
 int process_cd(char *args[], int argc);
+
+typedef enum {
+    STATE_NORMAL,
+    STATE_IN_SINGLE_QUOTES,
+    STATE_IN_DOUBLE_QUOTES,
+    STATE_ESCAPED,
+} parse_state_e;
 
 typedef struct builtin_command_t {
         const char *name;
@@ -28,20 +40,26 @@ builtin_command_t builtin_commands[] = {
 };
 
 int main() {
-    // Flush after every printf
-    setbuf(stdout, NULL);
 
     char input[1024];
 
-    char *args[20];
+    char *args[MAX_TOKENS];
 
     while (1) {
 
-        memset(input, 0, 1024);
+        // Flush after every printf
+        setbuf(stdout, NULL);
         printf("$ ");
         memset(input, 0, 1024);
         fgets(input, 1024, stdin);
-        int token_num = tokenize_input(input, args);
+        // Elimina el \n si lo hay
+        input[strcspn(input, "\n")] = '\0';
+        int token_num = tokenize(input, args);
+        // Mostrar los tokens resultantes
+        /*printf("Se encontraron %d tokens:\n", token_num);*/
+        /*for (int i = 0; i < token_num; i++) {*/
+        /*    printf("[%d] = '%s'\n", i, args[i]);*/
+        /*}*/
 
         int found = 0;
         int check = 0;
@@ -75,60 +93,104 @@ int main() {
     return 0;
 }
 
-int tokenize_input(const char *input, char **args) {
-    int token_idx = 0;
-    int token_num = 0;
-    int in_token = 0;
-    int in_quote = 0;
-    int in_dquote = 0;
+void finish_token(char *buffer, int *buf_idx, char **tokens, int *token_count) {
+    if (*buf_idx > 0) {
+        // Cerrar el string
+        buffer[*buf_idx] = '\0';
 
-    for (int i = 0; i < strlen(input); i++) {
-        char temp[100];
+        // Reservar memoria para el nuevo token
+        tokens[*token_count] = (char *)malloc(strlen(buffer) + 1);
+        if (tokens[*token_count] == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
 
-        if (input[i] == '\n') {
-            // Base case, end of the input
-            temp[token_idx] = '\0';
-            args[token_num] = malloc(sizeof(char) * strlen(temp));
-            strcpy(args[token_num], temp);
-            token_num++;
+        // Copiar el contenido del buffer al token
+        strcpy(tokens[*token_count], buffer);
+
+        // Incrementar el numero de tokens y reiniciar el indice
+        (*token_count)++;
+        *buf_idx = 0;
+    }
+}
+
+int tokenize(const char *line, char **tokens) {
+    parse_state_e state = STATE_NORMAL;
+    char buffer[MAX_LENGTH];
+    int buf_idx = 0;
+    int token_count = 0;
+
+    for (int i = 0; i < (int)strlen(line); i++) {
+        char c = line[i];
+
+        switch (state) {
+        case STATE_NORMAL:
+            if (c == '\\') {
+                // Pasamos al estado STATE_ESCAPED
+                state = STATE_ESCAPED;
+            } else if (c == '\'') {
+                // Pasamos al estado comillas simples
+                state = STATE_IN_SINGLE_QUOTES;
+            } else if (c == '\"') {
+                // Pasamos al estado comillas dobles
+                state = STATE_IN_DOUBLE_QUOTES;
+            } else if (isspace((unsigned char)c)) {
+                finish_token(buffer, &buf_idx, tokens, &token_count);
+            } else {
+                // Caracter normal lo agregamos al buffer
+                if (buf_idx < MAX_LENGTH - 1) {
+                    buffer[buf_idx++] = c;
+                }
+            }
             break;
-        } else if (input[i] == ' ') {
-            if ((in_token == 1) && (in_quote == 0) && (in_dquote == 0)) {
-                temp[token_idx] = '\0';
-                token_idx = 0;
-                args[token_num] = malloc(sizeof(char) * strlen(temp));
-                strcpy(args[token_num], temp);
-                in_token = 0;
-                in_quote = 0;
-                token_num++;
-            } else if ((in_token == 1) && (in_quote == 1) || (in_dquote == 1)) {
-                temp[token_idx++] = input[i];
-            }
-        } else if (input[i] == '\'' && in_dquote == 0) {
-            if (in_quote == 1) {
-                in_quote = 0;
+
+        case STATE_IN_SINGLE_QUOTES:
+            if (c == '\'') {
+                // Cierre de comillas simples
+                state = STATE_NORMAL;
             } else {
-                in_quote = 1;
+                // Acumulamos literal
+                if (buf_idx < MAX_LENGTH - 1) {
+                    buffer[buf_idx++] = c;
+                }
             }
-        } else if (input[i] == '\'' && in_dquote == 1) {
-            temp[token_idx++] = input[i];
-        } else if (input[i] == '\"') {
-            if (in_dquote == 0) {
-                in_dquote = 1;
+            break;
+
+        case STATE_IN_DOUBLE_QUOTES:
+            if (c == '\"') {
+                // Cierre de comillas dobles
+                state = STATE_NORMAL;
+            } else if (c == '\\') {
+                // Permitir escapes dentro de comillas dobles
+                state = STATE_ESCAPED;
             } else {
-                in_dquote = 0;
+                // Acumulamos literal
+                if (buf_idx < MAX_LENGTH - 1) {
+                    buffer[buf_idx++] = c;
+                }
             }
-        } else if (input[i] == '\\' && ((in_dquote == 0) && (in_quote == 0))) {
-            i++;
-            temp[token_idx++] = input[i];
-        } else {
-            if (in_token == 0)
-                in_token = 1;
-            temp[token_idx++] = input[i];
+            break;
+
+        case STATE_ESCAPED:
+            // Tomamos el siguiente caracter literalmente
+            if (buf_idx < MAX_LENGTH - 1) {
+                buffer[buf_idx++] = c;
+            }
+            // Heuristica minima para volver a un estado anterior.
+            // En un diseño mas completo se guardaria prev_state
+            if (i > 0 && line[i - 1] == '\"') {
+                state = STATE_IN_DOUBLE_QUOTES;
+            } else {
+                state = STATE_NORMAL;
+            }
+            break;
         }
     }
 
-    return token_num;
+    // Si quedara algo en el buffer al final, cerrar ese token
+    finish_token(buffer, &buf_idx, tokens, &token_count);
+
+    return token_count;
 }
 
 int is_executable(const char *path) { return access(path, X_OK) == 0; }

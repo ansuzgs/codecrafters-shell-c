@@ -176,9 +176,9 @@ int tokenize(const char *line, char **tokens) {
         case STATE_ESCAPED:
             // Tomamos el siguiente caracter literalmente
             switch (c) {
-            /*case 'n':*/
-            /*    buffer[buf_idx++] = '\n';*/
-            /*    break;*/
+            case 'n':
+                buffer[buf_idx++] = 'n';
+                break;
             case 't':
                 buffer[buf_idx++] = '\t';
                 break;

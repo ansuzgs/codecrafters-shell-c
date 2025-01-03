@@ -213,6 +213,7 @@ int tokenize(const char *line, char **tokens) {
                     break;
                 case '\"':
                     buffer[buf_idx++] = '\"';
+                    break;
                 default:
                     if (buf_idx < MAX_LENGTH - 2) {
                         buffer[buf_idx++] = '\\';

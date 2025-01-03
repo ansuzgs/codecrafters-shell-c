@@ -1,6 +1,5 @@
 #include <ctype.h>
 #include <limits.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -212,6 +211,8 @@ int tokenize(const char *line, char **tokens) {
                 case '\\':
                     buffer[buf_idx++] = '\\';
                     break;
+                case '\"':
+                    buffer[buf_idx++] = '\"';
                 default:
                     if (buf_idx < MAX_LENGTH - 2) {
                         buffer[buf_idx++] = '\\';

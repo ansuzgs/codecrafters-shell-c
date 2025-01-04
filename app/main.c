@@ -275,9 +275,6 @@ char *find_in_path(const char *command) {
 }
 
 void fork_and_execute(char *cmd_path, int argc, char **args, char *out_file) {
-    for (int i = 0; i < argc; i++) {
-        printf("args[%d] = %s\n", i, args[i]);
-    }
     pid_t pid = fork();
     if (pid == 0) {
         if (out_file != NULL) {

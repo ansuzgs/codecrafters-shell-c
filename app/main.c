@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +15,7 @@ void finish_token(char *buffer, int *buf_idx, char **tokens, int *token_count);
 int tokenize(const char *line, char **tokens);
 int is_executable(const char *path);
 char *find_in_path(const char *command);
-void fork_and_execute(char *cmd_path, int argc, char **args);
+void fork_and_execute(char *cmd_path, int argc, char **args, char *out_file);
 int process_exit(char *args[], int argc);
 int process_echo(char *args[], int argc);
 int process_type(char *args[], int argc);
@@ -71,10 +72,25 @@ int main() {
         }
 
         if (found == 0) {
+            char *out_file = NULL;
+
+            for (int i = 0; i < token_num; i++) {
+                if (strcmp(args[i], ">") == 0 || strcmp(args[i], "1>") == 0) {
+                    if (i + 1 < token_num) {
+                        out_file = args[i + 1];
+                    }
+                    for (int j = i; j + 2 <= token_num; j++) {
+                        args[j] = args[j + 2];
+                    }
+                    token_num -= 2;
+                    break;
+                }
+            }
+            args[token_num] = NULL;
             char *cmd_path = find_in_path(args[0]);
             if (cmd_path != NULL) {
                 args[token_num] = NULL;
-                fork_and_execute(cmd_path, token_num, args);
+                fork_and_execute(cmd_path, token_num, args, out_file);
                 found = 1;
             }
         }
@@ -258,12 +274,21 @@ char *find_in_path(const char *command) {
     return NULL;
 }
 
-void fork_and_execute(char *cmd_path, int argc, char **args) {
-    /*for (int i = 0; i < argc; i++) {*/
-    /*    printf("args[%d] = %s\n", i, args[i]);*/
-    /*}*/
+void fork_and_execute(char *cmd_path, int argc, char **args, char *out_file) {
+    for (int i = 0; i < argc; i++) {
+        printf("args[%d] = %s\n", i, args[i]);
+    }
     pid_t pid = fork();
     if (pid == 0) {
+        if (out_file != NULL) {
+            int fd = open(out_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (fd < 0) {
+                perror("open redirection");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
         execv(cmd_path, args);
         perror("execv");
         exit(EXIT_FAILURE);

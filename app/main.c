@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,12 +16,12 @@ void finish_token(char *buffer, int *buf_idx, char **tokens, int *token_count);
 int tokenize(const char *line, char **tokens);
 int is_executable(const char *path);
 char *find_in_path(const char *command);
-void fork_and_execute(char *cmd_path, int argc, char **args, char *out_file);
-int process_exit(char *args[], int argc, char *out_file);
-int process_echo(char *args[], int argc, char *out_file);
-int process_type(char *args[], int argc, char *out_file);
-int process_pwd(char *args[], int argc, char *out_file);
-int process_cd(char *args[], int argc, char *out_file);
+void fork_and_execute(char *cmd_path, int argc, char **args);
+int process_exit(char *args[], int argc);
+int process_echo(char *args[], int argc);
+int process_type(char *args[], int argc);
+int process_pwd(char *args[], int argc);
+int process_cd(char *args[], int argc);
 
 typedef enum {
     STATE_NORMAL,
@@ -31,7 +32,7 @@ typedef enum {
 
 typedef struct builtin_command_t {
         const char *name;
-        int (*process)(char *args[], int argc, char *out_file);
+        int (*process)(char *args[], int argc);
 } builtin_command_t;
 
 builtin_command_t builtin_commands[] = {
@@ -57,6 +58,18 @@ int main() {
         int token_num = tokenize(input, args);
 
         char *out_file = NULL;
+        char *err_file = NULL;
+        int saved_stdout = dup(STDOUT_FILENO);
+        if (saved_stdout < 0) {
+            perror("stdout");
+            exit(EXIT_FAILURE);
+        }
+
+        int saved_stderr = dup(STDERR_FILENO);
+        if (saved_stderr < 0) {
+            perror("stdout");
+            exit(EXIT_FAILURE);
+        }
 
         for (int i = 0; i < token_num; i++) {
             if (strcmp(args[i], ">") == 0 || strcmp(args[i], "1>") == 0) {
@@ -67,16 +80,72 @@ int main() {
                     args[j] = args[j + 2];
                 }
                 token_num -= 2;
+
+                if (out_file != NULL) {
+                    char *path_copy = strdup(out_file);
+                    if (!path_copy) {
+                        perror("strdup");
+                        return EXIT_FAILURE;
+                    }
+                    char *dir_path = dirname(path_copy);
+                    char cmd[1024];
+                    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", dir_path);
+                    if (system(cmd) != 0) {
+                        fprintf(stderr, "Error al crear directorio: %s\n",
+                                dir_path);
+                        free(path_copy);
+                        return EXIT_FAILURE;
+                    }
+
+                    int fd = open(out_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+                    if (fd < 0) {
+                        perror("open redirection");
+                        free(path_copy);
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                    free(path_copy);
+                }
+                break;
+            }
+            if (strcmp(args[i], "2>") == 0) {
+                if (i + 1 < token_num) {
+                    err_file = args[i + 1];
+                }
+                for (int j = i; j + 2 <= token_num; j++) {
+                    args[j] = args[j + 2];
+                }
+                token_num -= 2;
+                if (err_file != NULL) {
+                    char *path_copy = strdup(err_file);
+                    if (!path_copy) {
+                        perror("strdup");
+                        return EXIT_FAILURE;
+                    }
+                    char *dir_path = dirname(path_copy);
+                    char cmd[1024];
+                    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", dir_path);
+                    if (system(cmd) != 0) {
+                        fprintf(stderr, "Error al crear directorio: %s\n",
+                                dir_path);
+                        free(path_copy);
+                        return EXIT_FAILURE;
+                    }
+                    int fd = open(err_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+                    if (fd < 0) {
+                        perror("open redirection");
+                        free(path_copy);
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(fd, STDERR_FILENO);
+                    close(fd);
+                    free(path_copy);
+                }
                 break;
             }
         }
         args[token_num] = NULL;
-
-        int saved_stdout = dup(STDOUT_FILENO);
-        if (saved_stdout < 0) {
-            perror("stdout");
-            exit(EXIT_FAILURE);
-        }
 
         // Mostrar los tokens resultantes
         /*printf("Se encontraron %d tokens:\n", token_num);*/
@@ -89,7 +158,7 @@ int main() {
         for (int i = 0; i < ARRAY_SIZE(builtin_commands); i++) {
             if (strncmp(args[0], builtin_commands[i].name,
                         strlen(builtin_commands[i].name)) == 0) {
-                check = builtin_commands[i].process(args, token_num, out_file);
+                check = builtin_commands[i].process(args, token_num);
                 found = 1;
             }
         }
@@ -99,7 +168,7 @@ int main() {
             char *cmd_path = find_in_path(args[0]);
             if (cmd_path != NULL) {
                 args[token_num] = NULL;
-                fork_and_execute(cmd_path, token_num, args, out_file);
+                fork_and_execute(cmd_path, token_num, args);
                 found = 1;
             }
         }
@@ -111,7 +180,12 @@ int main() {
         for (int i = 0; i < token_num; i++) {
             free(args[i]);
         }
+
         if (dup2(saved_stdout, STDOUT_FILENO) < 0) {
+            perror("dup2 restore");
+            exit(EXIT_FAILURE);
+        }
+        if (dup2(saved_stderr, STDERR_FILENO) < 0) {
             perror("dup2 restore");
             exit(EXIT_FAILURE);
         }
@@ -288,18 +362,9 @@ char *find_in_path(const char *command) {
     return NULL;
 }
 
-void fork_and_execute(char *cmd_path, int argc, char **args, char *out_file) {
+void fork_and_execute(char *cmd_path, int argc, char **args) {
     pid_t pid = fork();
     if (pid == 0) {
-        if (out_file != NULL) {
-            int fd = open(out_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-            if (fd < 0) {
-                perror("open redirection");
-                exit(EXIT_FAILURE);
-            }
-            dup2(fd, STDOUT_FILENO);
-            close(fd);
-        }
         execv(cmd_path, args);
         perror("execv");
         exit(EXIT_FAILURE);
@@ -311,7 +376,7 @@ void fork_and_execute(char *cmd_path, int argc, char **args, char *out_file) {
     }
 }
 
-int process_exit(char *args[], int argc, char *out_file) {
+int process_exit(char *args[], int argc) {
     if (argc == 2) {
         if (strncmp(args[1], "0", 1) == 0) {
             exit(EXIT_SUCCESS);
@@ -325,16 +390,7 @@ int process_exit(char *args[], int argc, char *out_file) {
     return 0;
 }
 
-int process_echo(char *args[], int argc, char *out_file) {
-    if (out_file != NULL) {
-        int fd = open(out_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd < 0) {
-            perror("open redirection");
-            exit(EXIT_FAILURE);
-        }
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
-    }
+int process_echo(char *args[], int argc) {
     for (int i = 1; i < argc; i++) {
         if (i < argc - 1) {
             printf("%s ", args[i]);
@@ -346,7 +402,7 @@ int process_echo(char *args[], int argc, char *out_file) {
     return 0;
 }
 
-int process_type(char *args[], int argc, char *out_file) {
+int process_type(char *args[], int argc) {
     if (argc == 2) {
         for (int i = 0; i < ARRAY_SIZE(builtin_commands); i++) {
             if (strncmp(args[1], builtin_commands[i].name,
@@ -367,7 +423,7 @@ int process_type(char *args[], int argc, char *out_file) {
     return 0;
 }
 
-int process_pwd(char *args[], int argc, char *out_file) {
+int process_pwd(char *args[], int argc) {
     char current_path[PATH_MAX];
     if (getcwd(current_path, PATH_MAX) != NULL) {
         printf("%s\n", current_path);
@@ -376,7 +432,7 @@ int process_pwd(char *args[], int argc, char *out_file) {
     }
     return 0;
 }
-int process_cd(char *args[], int argc, char *out_file) {
+int process_cd(char *args[], int argc) {
     if (strncmp(args[1], "~", 1) == 0) {
         char *home_env = getenv("HOME");
         if (home_env == NULL)

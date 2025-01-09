@@ -109,6 +109,45 @@ int main() {
                 }
                 break;
             }
+            if (strcmp(args[i], ">>") == 0 || strcmp(args[i], "1>>") == 0) {
+                if (i + 1 < token_num) {
+                    out_file = args[i + 1];
+                }
+                for (int j = i; j + 2 <= token_num; j++) {
+                    args[j] = args[j + 2];
+                }
+                token_num -= 2;
+
+                if (out_file != NULL) {
+                    char *path_copy = strdup(out_file);
+                    if (!path_copy) {
+                        perror("strdup");
+                        return EXIT_FAILURE;
+                    }
+                    char *dir_path = dirname(path_copy);
+                    char cmd[1024];
+                    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", dir_path);
+                    if (system(cmd) != 0) {
+                        fprintf(stderr, "Error al crear directorio: %s\n",
+                                dir_path);
+                        free(path_copy);
+                        return EXIT_FAILURE;
+                    }
+
+                    int fd =
+                        open(out_file, O_WRONLY | O_CREAT | O_APPEND, 0666);
+                    if (fd < 0) {
+                        perror("open redirection");
+                        free(path_copy);
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                    free(path_copy);
+                }
+                break;
+            }
+
             if (strcmp(args[i], "2>") == 0) {
                 if (i + 1 < token_num) {
                     err_file = args[i + 1];
